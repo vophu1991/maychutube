@@ -1,11 +1,11 @@
 
 /* === CHAN MAN HINH DANG NHAP / MA QR KHI BAM BACK O TRANG CHU - THOAT APP LUON === */
 (function() {
-  // Hide any QR code / sign-in screen completely from rendering
+  // 1. Chặn triệt để mã QR / màn hình đăng nhập hiển thị trên DOM bằng CSS
   try {
     var st = document.createElement('style');
     st.type = 'text/css';
-    st.innerHTML = 'ytlr-sign-in-renderer, [idomkey*="sign-in-renderer"], [idomkey*="qr-code"] { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; }';
+    st.innerHTML = 'ytlr-sign-in-renderer, [idomkey*="sign-in-renderer"], [idomkey*="qr-code"], [class*="sign-in-renderer"], ytlr-dialog-renderer:has(ytlr-sign-in-renderer) { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; width: 0 !important; height: 0 !important; }';
     (document.head || document.documentElement).appendChild(st);
   } catch(e) {}
 
@@ -22,7 +22,20 @@
     return false;
   }
 
-  function isAtHomeInSidebar() {
+  // Thu gọn từ nhánh lớn về nhánh nhỏ (gửi phím D-pad Phải để đóng menu lớn sang nhánh nhỏ nội dung)
+  function collapseSidebarToSmallBranch(act) {
+    try {
+      var target = act || document.activeElement || document.body;
+      var evDown = new KeyboardEvent('keydown', { key: 'ArrowRight', code: 'ArrowRight', keyCode: 39, which: 39, bubbles: true, cancelable: true });
+      var evUp = new KeyboardEvent('keyup', { key: 'ArrowRight', code: 'ArrowRight', keyCode: 39, which: 39, bubbles: true, cancelable: true });
+      target.dispatchEvent(evDown);
+      target.dispatchEvent(evUp);
+    } catch(e) {}
+  }
+
+  // Kiểm tra trạng thái vị trí con trỏ tại nút Trang chủ
+  // Trả về: 'HOME_SMALL' (nhánh nhỏ -> thoát app), 'HOME_BIG' (nhánh lớn -> thu về nhánh nhỏ), hoặc false
+  function getHomeState() {
     try {
       var act = document.activeElement;
       if (!act || act === document.body || act === document.documentElement) {
@@ -30,43 +43,19 @@
       }
       if (!act) return false;
 
-      // Neu co bat ky modal/popup nao dang mo hoac dang o Cai dat thi khong can thiep:
-      if (document.querySelector('ytlr-dialog-renderer, ytlr-overlay-renderer, [class*="modal"], [class*="tt-settings"], [class*="popup"]')) {
-        return false;
-      }
-      var _chk = ((act.innerText || act.textContent || '') + ' ' + (act.getAttribute('aria-label') || '')).toLowerCase();
-      if (_chk.indexOf('cài đặt') !== -1 || _chk.indexOf('cai dat') !== -1 || _chk.indexOf('tizentube') !== -1) {
+      // Nếu đang mở popup Cài đặt TizenTube/Box thì không can thiệp
+      if (document.querySelector('[class*="tt-settings"], .tt-settings-modal')) {
         return false;
       }
 
-      // 1. Kiem tra xem co phai o vi tri Sidebar (ben trai man hinh) khong:
       var rect = null;
       if (typeof act.getBoundingClientRect === 'function') {
         rect = act.getBoundingClientRect();
         if (rect && rect.left > 350) {
-          return false; // Dang o khu vuc noi dung video, khong phai sidebar!
+          return false; // Đang ở trong danh sách video, không phải menu
         }
       }
 
-      // 2. PHAN BIET NHANH LON VA NHANH NHO:
-      // Khi Menu dang bung to (Nhanh lon), do rong cua nut hoac container > 120px, hoac guide-response dang mo rong:
-      var guide = document.querySelector('ytlr-guide-response, [idomkey*="guide"], [class*="guide"]');
-      if (guide) {
-        var gRect = guide.getBoundingClientRect();
-        if (gRect && gRect.width > 120) {
-          return false; // Dang o nhanh lon (menu mo rong), KHONG thoat app, de Back thu ve nhanh nho!
-        }
-      }
-      if (rect && rect.width > 120) {
-        return false; // Nut dang o trang thai mo rong co chu (> 120px), KHONG thoat app!
-      }
-      // Kiem tra thuoc tinh aria-expanded tren phan tu hoac the cha
-      var expEl = act.closest ? act.closest('[aria-expanded="true"], [expanded="true"], .expanded') : null;
-      if (expEl) {
-        return false;
-      }
-
-      // 3. Xac nhan phan tu co phai nut Trang chu (Home) khong:
       var aria = (act.getAttribute('aria-label') || '').toLowerCase();
       var txt = (act.innerText || act.textContent || '').trim().toLowerCase();
       var idom = (act.getAttribute('idomkey') || '').toLowerCase();
@@ -84,28 +73,49 @@
       }
 
       if (!hasHomeText && rect) {
-        // O cot sidebar nhanh nho, Home la muc thu 3 (Y tu 140 den 300, X < 120)
-        if (rect.left < 120 && rect.top >= 140 && rect.top <= 300) {
+        if (rect.left < 250 && rect.top >= 140 && rect.top <= 300) {
           if (txt.indexOf('tìm kiếm') === -1 && aria.indexOf('tìm kiếm') === -1 &&
               txt.indexOf('đăng nhập') === -1 && aria.indexOf('đăng nhập') === -1 &&
-              txt.indexOf('âm nhạc') === -1 && aria.indexOf('âm nhạc') === -1 && txt.indexOf('cài đặt') === -1 && txt.indexOf('tizentube') === -1) {
+              txt.indexOf('âm nhạc') === -1 && aria.indexOf('âm nhạc') === -1 && txt.indexOf('cài đặt') === -1) {
             hasHomeText = true;
           }
         }
       }
 
-      return hasHomeText;
+      if (!hasHomeText) return false;
+
+      // Phân biệt nhánh lớn vs nhánh nhỏ:
+      // Nhánh lớn: menu đang mở rộng có chữ (width > 120px) hoặc guide đang mở
+      var guide = document.querySelector('ytlr-guide-response, [idomkey*="guide"], [class*="guide"]');
+      var isBig = false;
+      if (guide) {
+        var gRect = guide.getBoundingClientRect();
+        if (gRect && gRect.width > 120) isBig = true;
+      }
+      if (rect && rect.width > 120) isBig = true;
+      if (act.closest && act.closest('[aria-expanded="true"], [expanded="true"], .expanded')) isBig = true;
+
+      return isBig ? 'HOME_BIG' : 'HOME_SMALL';
     } catch(e) {
       return false;
     }
   }
 
-  // Intercept Back key when focused on Home item in the sidebar
+  // Bắt sự kiện phím Back
   window.addEventListener('keydown', function(e) {
     try {
       var kc = e.keyCode || e.which;
       if (kc === 27 || kc === 4 || e.key === 'Escape' || e.key === 'Back') {
-        if (isAtHomeInSidebar()) {
+        var state = getHomeState();
+        if (state === 'HOME_BIG') {
+          // Đang ở nhánh lớn: Chặn không cho hiện mã QR đăng nhập, chuyển sang nhánh nhỏ!
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          collapseSidebarToSmallBranch(document.activeElement);
+          return false;
+        } else if (state === 'HOME_SMALL') {
+          // Đang ở nhánh nhỏ: Thoát app luôn êm ái!
           e.preventDefault();
           e.stopPropagation();
           e.stopImmediatePropagation();
@@ -116,7 +126,7 @@
     } catch(ex) {}
   }, true);
 
-  // Guard against any QR login dialog appearing in DOM
+  // 2. Tự động dẹp sạch và hủy bỏ bất kỳ popup/màn hình QR đăng nhập nào nếu xuất hiện
   if (typeof MutationObserver !== 'undefined') {
     var observer = new MutationObserver(function() {
       try {
@@ -128,7 +138,12 @@
             if (v && !v.paused && v.currentTime > 0) isPlaying = true;
           } catch(e) {}
           if (!isPlaying) {
-            exitCobaltApp();
+            // Loại bỏ hoàn toàn phần tử QR khỏi giao diện
+            try { qr.remove(); } catch(e) { qr.style.display = 'none'; }
+            var dialog = document.querySelector('ytlr-dialog-renderer, ytlr-overlay-renderer');
+            if (dialog && !dialog.querySelector('[class*="tt-settings"]')) {
+              try { dialog.remove(); } catch(e) { dialog.style.display = 'none'; }
+            }
           }
         }
       } catch(e) {}
