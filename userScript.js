@@ -30,7 +30,7 @@
       }
       if (!act) return false;
 
-      // Neu co bat ky modal/popup nao dang mo hoac dang o Cai dat/TizenTube thi khong can thiep:
+      // Neu co bat ky modal/popup nao dang mo hoac dang o Cai dat thi khong can thiep:
       if (document.querySelector('ytlr-dialog-renderer, ytlr-overlay-renderer, [class*="modal"], [class*="tt-settings"], [class*="popup"]')) {
         return false;
       }
@@ -39,15 +39,34 @@
         return false;
       }
 
-      // Sidebar items are on the left side (rect.left < 350px)
+      // 1. Kiem tra xem co phai o vi tri Sidebar (ben trai man hinh) khong:
       var rect = null;
       if (typeof act.getBoundingClientRect === 'function') {
         rect = act.getBoundingClientRect();
         if (rect && rect.left > 350) {
-          return false; // User is in video grid / content rows, NOT in sidebar!
+          return false; // Dang o khu vuc noi dung video, khong phai sidebar!
         }
       }
 
+      // 2. PHAN BIET NHANH LON VA NHANH NHO:
+      // Khi Menu dang bung to (Nhanh lon), do rong cua nut hoac container > 120px, hoac guide-response dang mo rong:
+      var guide = document.querySelector('ytlr-guide-response, [idomkey*="guide"], [class*="guide"]');
+      if (guide) {
+        var gRect = guide.getBoundingClientRect();
+        if (gRect && gRect.width > 120) {
+          return false; // Dang o nhanh lon (menu mo rong), KHONG thoat app, de Back thu ve nhanh nho!
+        }
+      }
+      if (rect && rect.width > 120) {
+        return false; // Nut dang o trang thai mo rong co chu (> 120px), KHONG thoat app!
+      }
+      // Kiem tra thuoc tinh aria-expanded tren phan tu hoac the cha
+      var expEl = act.closest ? act.closest('[aria-expanded="true"], [expanded="true"], .expanded') : null;
+      if (expEl) {
+        return false;
+      }
+
+      // 3. Xac nhan phan tu co phai nut Trang chu (Home) khong:
       var aria = (act.getAttribute('aria-label') || '').toLowerCase();
       var txt = (act.innerText || act.textContent || '').trim().toLowerCase();
       var idom = (act.getAttribute('idomkey') || '').toLowerCase();
@@ -65,8 +84,8 @@
       }
 
       if (!hasHomeText && rect) {
-        // In the sidebar column, Home is item 3 (Y between 140 and 300)
-        if (rect.left < 250 && rect.top >= 140 && rect.top <= 300) {
+        // O cot sidebar nhanh nho, Home la muc thu 3 (Y tu 140 den 300, X < 120)
+        if (rect.left < 120 && rect.top >= 140 && rect.top <= 300) {
           if (txt.indexOf('tìm kiếm') === -1 && aria.indexOf('tìm kiếm') === -1 &&
               txt.indexOf('đăng nhập') === -1 && aria.indexOf('đăng nhập') === -1 &&
               txt.indexOf('âm nhạc') === -1 && aria.indexOf('âm nhạc') === -1 && txt.indexOf('cài đặt') === -1 && txt.indexOf('tizentube') === -1) {
